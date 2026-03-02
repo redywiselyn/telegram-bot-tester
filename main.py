@@ -1,4 +1,4 @@
-# ================= Crypto + Stocks Scanner Final =================
+# ================= Crypto + Stocks Scanner 4H Final (Coin Only) =================
 import os
 import time
 import requests
@@ -69,7 +69,7 @@ def get_crypto_symbols():
 
 def check_crypto_signal(symbol):
     try:
-        klines = client.futures_klines(symbol=symbol, interval='30m', limit=150)
+        klines = client.futures_klines(symbol=symbol, interval='4h', limit=100)
         df = pd.DataFrame(klines)
         df[4] = df[4].astype(float)  # Close
         df[5] = df[5].astype(float)  # Volume
@@ -98,28 +98,29 @@ stored_stock_message = ""  # Simpan hasil scan saham
 while True:
     now = pd.Timestamp.now()
     now_hour = now.hour
+    now_minute = now.minute
 
-    # ---------------- CRYPTO 30M ----------------
+    # ---------------- CRYPTO 4H ----------------
     crypto_msg = "CRYPTO :\n\n🟢 BULLISH:\n"
     bullish, bearish = [], []
 
-    if 6 <= now_hour <= 21:
+    if now_hour % 4 == 0 and 6 <= now_hour <= 20 and now_minute < 5:
         for sym in crypto_symbols:
             signal = check_crypto_signal(sym)
             price = float(client.futures_symbol_ticker(symbol=sym)['price'])
+            coin_name = sym.replace("USDT","")  # Hapus USDT
             if signal=="BULLISH":
-                bullish.append(f"{sym}: Entry {format_price(price)}")
+                bullish.append(f"{coin_name}: Entry {format_price(price)}")
             elif signal=="BEARISH":
-                bearish.append(f"{sym}: Entry {format_price(price)}")
+                bearish.append(f"{coin_name}: Entry {format_price(price)}")
 
         bullish = bullish[:10]
         bearish = bearish[:10]
         crypto_msg += "\n".join(bullish) + "\n\n🔴 BEARISH:\n" + "\n".join(bearish)
-    else:
-        crypto_msg += "\n\n🔴 BEARISH:\n"
+        send_telegram(crypto_msg)
 
     # ---------------- STOCKS SCAN ----------------
-    if now_hour == 17:  # Market close
+    if now_hour == 17 and now_minute < 5:  # Market close
         stock_msg = "STOCKS :\n"
         for sym in stocks:
             try:
@@ -138,16 +139,9 @@ while True:
                 continue
         stored_stock_message = stock_msg  # simpan hasil scan saham
 
-    # ---------------- SEND TELEGRAM ----------------
-    full_msg = crypto_msg
-    if now_hour == 8 and stored_stock_message:  # Kirim stocks jam 08:00
-        full_msg += "\n\n" + stored_stock_message
+    # ---------------- SEND STOCKS JAM 08:00 ----------------
+    if now_hour == 8 and now_minute < 5 and stored_stock_message:
+        send_telegram("STOCKS :\n\n" + stored_stock_message)
         stored_stock_message = ""  # reset setelah kirim
 
-    send_telegram(full_msg)
-
-    # ---------------- SLEEP ----------------
-    if 6 <= now_hour <= 21:
-        time.sleep(1800)  # 30 menit untuk crypto
-    else:
-        time.sleep(3600)  # di luar jam crypto scan
+    time.sleep(60)  # cek setiap menit untuk crypto 4H dan stocks 08:00
