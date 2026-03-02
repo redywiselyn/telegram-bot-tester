@@ -17,7 +17,6 @@ START_HOUR = 6
 END_HOUR = 21
 
 client = Client()
-sent_signals = set()
 
 # ======================
 # TELEGRAM
@@ -29,26 +28,24 @@ def send(msg):
     )
 
 # ======================
-# GET TOP 100 USDT PERP
+# GET TOP 100 PERP USDT
 # ======================
-def get_top100_symbols():
+def get_top100():
     tickers = client.futures_ticker()
-    usdt_pairs = [t for t in tickers if t['symbol'].endswith("USDT")]
+    usdt = [t for t in tickers if t['symbol'].endswith("USDT")]
 
-    # Urutkan berdasarkan volume terbesar
     sorted_pairs = sorted(
-        usdt_pairs,
+        usdt,
         key=lambda x: float(x['quoteVolume']),
         reverse=True
     )
 
-    top100 = [p['symbol'] for p in sorted_pairs[:100]]
-    return top100
+    return [p['symbol'] for p in sorted_pairs[:100]]
 
 # ======================
-# MA CROSS CHECK
+# CHECK MA CROSS
 # ======================
-def check_ma(symbol):
+def check_signal(symbol):
     try:
         klines = client.futures_klines(symbol=symbol, interval='30m', limit=120)
         df = pd.DataFrame(klines)
@@ -63,11 +60,11 @@ def check_ma(symbol):
 
         if prev['ma7'] < prev['ma25'] and last['ma7'] > last['ma25'] \
            and last['ma7'] > last['ma99'] and last['ma25'] > last['ma99']:
-            return "BULLISH"
+            return "🟢"
 
         if prev['ma7'] > prev['ma25'] and last['ma7'] < last['ma25'] \
            and last['ma7'] < last['ma99'] and last['ma25'] < last['ma99']:
-            return "BEARISH"
+            return "🔴"
 
         return None
     except:
@@ -78,37 +75,38 @@ def check_ma(symbol):
 # ======================
 send("🚀 TOP 100 Crypto MA 30M Scanner Aktif")
 
-symbols = get_top100_symbols()
+symbols = get_top100()
 
 while True:
     now = datetime.now(TIMEZONE)
     minute = now.minute
     hour = now.hour
 
-    # Hanya scan tepat menit 00 & 30
-    if minute in [0, 30]:
+    if minute in [0, 30] and START_HOUR <= hour <= END_HOUR:
 
-        if START_HOUR <= hour <= END_HOUR:
+        bullish = []
+        bearish = []
 
-            print("Scanning Top 100...")
-            found = False
+        for symbol in symbols:
+            signal = check_signal(symbol)
+            if signal == "🟢":
+                bullish.append(symbol.replace("USDT",""))
+            elif signal == "🔴":
+                bearish.append(symbol.replace("USDT",""))
 
-            for symbol in symbols:
-                signal = check_ma(symbol)
-                key = f"{symbol}_{signal}"
+        if bullish or bearish:
 
-                if signal and key not in sent_signals:
-                    price = float(client.futures_symbol_ticker(symbol=symbol)['price'])
+            message = f"⏰ {now.strftime('%H:%M WIB')}\n\n"
 
-                    msg = f"{symbol}\n{'🟢 BULLISH' if signal=='BULLISH' else '🔴 BEARISH'}\nPrice: {price}"
-                    send(msg)
+            if bullish:
+                message += "🟢 BULLISH:\n"
+                message += ", ".join(bullish) + "\n\n"
 
-                    sent_signals.add(key)
-                    found = True
-                    time.sleep(0.3)
+            if bearish:
+                message += "🔴 BEARISH:\n"
+                message += ", ".join(bearish)
 
-            if not found:
-                print("Tidak ada signal.")
+            send(message)
 
         time.sleep(60)
 
