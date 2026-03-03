@@ -10,12 +10,26 @@ TOKEN = os.getenv("TOKEN")
 CHAT_ID = int(os.getenv("CHAT_ID"))
 client = Client()
 
-# ================= STOCK LIST =================
+# ================= STOCK LIST FULL 100 =================
 stocks = [
     "BBCA.JK","BBRI.JK","BMRI.JK","TLKM.JK","ASII.JK",
     "UNTR.JK","ANTM.JK","ADRO.JK","MDKA.JK","GOTO.JK",
     "CPIN.JK","JPFA.JK","BRPT.JK","TPIA.JK","EXCL.JK",
-    "ISAT.JK","PTBA.JK","SMGR.JK","KLBF.JK","ICBP.JK"
+    "ISAT.JK","PTBA.JK","SMGR.JK","KLBF.JK","ICBP.JK",
+    "ADHI.JK","BBTN.JK","BJBR.JK","BRMS.JK","DSSA.JK",
+    "AMRT.JK","MSIN.JK","RAJA.JK","WIFI.JK","INKP.JK",
+    "TBIG.JK","ITMG.JK","TOWR.JK","AKRA.JK","ASRI.JK",
+    "AUTO.JK","BBYB.JK","INDF.JK","INCO.JK","MNCN.JK",
+    "PTRO.JK","AALI.JK","TBLA.JK","RALS.JK","PTPP.JK",
+    "SILO.JK","SMGR.JK","TKIM.JK","TKLN.JK","UNVR.JK",
+    "WIKA.JK","WSKT.JK","ADRO.JK","AISA.JK","AKRA.JK",
+    "ANTM.JK","BBCA.JK","BBRI.JK","BMRI.JK","BRPT.JK",
+    "CPIN.JK","EXCL.JK","GOTO.JK","ICBP.JK","INDF.JK",
+    "INCO.JK","JPFA.JK","KLBF.JK","MDKA.JK","MNCN.JK",
+    "PTRO.JK","RAJA.JK","SMGR.JK","TLKM.JK","TPIA.JK",
+    "UNTR.JK","WIFI.JK","AMMN.JK","BREN.JK","DSNG.JK",
+    "ENRG.JK","MSIN.JK","RATU.JK","TAPG.JK","AADI.JK",
+    "KPIG.JK","RALS.JK","WIKA.JK","WSKT.JK","TKIM.JK"
 ]
 stocks = list(set(stocks))  # hapus duplikat
 
@@ -67,17 +81,15 @@ def check_crypto_signal(symbol):
     except:
         return None
 
-# ================= MAIN =================
+# ================= MAIN LOOP =================
 crypto_symbols = get_crypto_symbols()
-stored_stock_message = ""
 last_crypto_hour = -1
-stock_report_sent = False
 
 while True:
     now = pd.Timestamp.now()
-    h, m = now.hour, now.minute
+    h = now.hour
 
-    # ---------------- CRYPTO ----------------
+    # ---------------- CRYPTO 4H, report tiap 2 jam ----------------
     if 6 <= h <= 20 and h % 2 == 0 and last_crypto_hour != h:
         last_crypto_hour = h
         bullish, bearish = [], []
@@ -89,34 +101,29 @@ while True:
                 bullish.append(f"{coin_name}: Entry {format_price(price)}")
             elif signal == "BEARISH":
                 bearish.append(f"{coin_name}: Entry {format_price(price)}")
-
         msg = "CRYPTO :\n\n🟢 BULLISH:\n" + "\n".join(bullish) + "\n\n🔴 BEARISH:\n" + "\n".join(bearish)
         send_telegram(msg)
 
-    # ---------------- STOCKS SCAN ----------------
-    if h == 17 and m < 5:  # market close
-        stock_msg = ""
-        for sym in stocks:
-            try:
-                df = yf.download(sym, period="6mo", interval="1d", progress=False)
-                df['MA20'] = df['Close'].rolling(20).mean()
-                df['MA50'] = df['Close'].rolling(50).mean()
-                df['RSI'] = compute_rsi(df['Close'])
-                last = df.iloc[-1]
-                prev = df.iloc[-2]
-                if prev['MA20'] < prev['MA50'] and last['MA20'] > last['MA50'] and last['RSI']>50:
-                    stock_msg += f"{sym}: Entry {format_price(last['Close'])}\n"
-                elif prev['MA20'] > prev['MA50'] and last['MA20'] < last['MA50'] and last['RSI']<50:
-                    stock_msg += f"{sym}: Entry {format_price(last['Close'])}\n"
-            except:
-                continue
-        stored_stock_message = stock_msg
-        stock_report_sent = False
+    # ---------------- STOCKS FULL SCAN ----------------
+    bullish_stock, bearish_stock = [], []
+    for sym in stocks:
+        try:
+            df = yf.download(sym, period="6mo", interval="1d", progress=False)
+            df['MA20'] = df['Close'].rolling(20).mean()
+            df['MA50'] = df['Close'].rolling(50).mean()
+            df['RSI'] = compute_rsi(df['Close'])
+            last = df.iloc[-1]
+            prev = df.iloc[-2]
 
-    # ---------------- SEND STOCKS JAM 18:00 ----------------
-    if h == 18 and not stock_report_sent:
-        if stored_stock_message:
-            send_telegram("STOCKS :\n\n" + stored_stock_message)
-        stock_report_sent = True  # pastikan hanya sekali
+            if prev['MA20'] < prev['MA50'] and last['MA20'] > last['MA50'] and last['RSI']>50:
+                bullish_stock.append(f"{sym}: Entry {format_price(last['Close'])}")
+            elif prev['MA20'] > prev['MA50'] and last['MA20'] < last['MA50'] and last['RSI']<50:
+                bearish_stock.append(f"{sym}: Entry {format_price(last['Close'])}")
+        except:
+            continue
 
-    time.sleep(60)
+    stock_msg = "STOCKS :\n\n🟢 BULLISH:\n" + "\n".join(bullish_stock) + "\n\n🔴 BEARISH:\n" + "\n".join(bearish_stock)
+    send_telegram(stock_msg)
+
+    # ---------------- WAIT ----------------
+    time.sleep(3600)  # loop tiap 1 jam
