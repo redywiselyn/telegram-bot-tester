@@ -64,15 +64,11 @@ def check_crypto_signal(symbol):
         klines = client.futures_klines(symbol=symbol, interval='4h', limit=100)
         df = pd.DataFrame(klines)
         df[4] = df[4].astype(float)
-        df[5] = df[5].astype(float)
-
         df['MA7'] = df[4].rolling(7).mean()
         df['MA25'] = df[4].rolling(25).mean()
         df['RSI'] = compute_rsi(df[4])
-
         last = df.iloc[-1]
         prev = df.iloc[-2]
-
         if prev['MA7'] < prev['MA25'] and last['MA7'] > last['MA25'] and last['RSI']>45:
             return "BULLISH"
         if prev['MA7'] > prev['MA25'] and last['MA7'] < last['MA25'] and last['RSI']<55:
@@ -84,12 +80,13 @@ def check_crypto_signal(symbol):
 # ================= MAIN LOOP =================
 crypto_symbols = get_crypto_symbols()
 last_crypto_hour = -1
+stock_sent_today = False
 
 while True:
     now = pd.Timestamp.now()
-    h = now.hour
+    h, m = now.hour, now.minute
 
-    # ---------------- CRYPTO 4H, report tiap 2 jam ----------------
+    # ---------------- CRYPTO ----------------
     if 6 <= h <= 20 and h % 2 == 0 and last_crypto_hour != h:
         last_crypto_hour = h
         bullish, bearish = [], []
@@ -104,26 +101,29 @@ while True:
         msg = "CRYPTO :\n\n🟢 BULLISH:\n" + "\n".join(bullish) + "\n\n🔴 BEARISH:\n" + "\n".join(bearish)
         send_telegram(msg)
 
-    # ---------------- STOCKS FULL SCAN ----------------
-    bullish_stock, bearish_stock = [], []
-    for sym in stocks:
-        try:
-            df = yf.download(sym, period="6mo", interval="1d", progress=False)
-            df['MA20'] = df['Close'].rolling(20).mean()
-            df['MA50'] = df['Close'].rolling(50).mean()
-            df['RSI'] = compute_rsi(df['Close'])
-            last = df.iloc[-1]
-            prev = df.iloc[-2]
+    # ---------------- STOCKS ----------------
+    if h == 18 and not stock_sent_today:
+        bullish_stock, bearish_stock = [], []
+        for sym in stocks:
+            try:
+                df = yf.download(sym, period="6mo", interval="1d", progress=False)
+                df['MA20'] = df['Close'].rolling(20).mean()
+                df['MA50'] = df['Close'].rolling(50).mean()
+                df['RSI'] = compute_rsi(df['Close'])
+                last = df.iloc[-1]
+                prev = df.iloc[-2]
+                if prev['MA20'] < prev['MA50'] and last['MA20'] > last['MA50'] and last['RSI']>50:
+                    bullish_stock.append(f"{sym}: Entry {format_price(last['Close'])}")
+                elif prev['MA20'] > prev['MA50'] and last['MA20'] < last['MA50'] and last['RSI']<50:
+                    bearish_stock.append(f"{sym}: Entry {format_price(last['Close'])}")
+            except:
+                continue
+        stock_msg = "STOCKS :\n\n🟢 BULLISH:\n" + "\n".join(bullish_stock) + "\n\n🔴 BEARISH:\n" + "\n".join(bearish_stock)
+        send_telegram(stock_msg)
+        stock_sent_today = True
 
-            if prev['MA20'] < prev['MA50'] and last['MA20'] > last['MA50'] and last['RSI']>50:
-                bullish_stock.append(f"{sym}: Entry {format_price(last['Close'])}")
-            elif prev['MA20'] > prev['MA50'] and last['MA20'] < last['MA50'] and last['RSI']<50:
-                bearish_stock.append(f"{sym}: Entry {format_price(last['Close'])}")
-        except:
-            continue
+    # reset stocks untuk besok
+    if h == 0 and stock_sent_today:
+        stock_sent_today = False
 
-    stock_msg = "STOCKS :\n\n🟢 BULLISH:\n" + "\n".join(bullish_stock) + "\n\n🔴 BEARISH:\n" + "\n".join(bearish_stock)
-    send_telegram(stock_msg)
-
-    # ---------------- WAIT ----------------
-    time.sleep(3600)  # loop tiap 1 jam
+    time.sleep(60)
