@@ -1,4 +1,3 @@
-# ================= Crypto + Stocks Scanner 4H Final (Coin Only) =================
 import os
 import time
 import requests
@@ -7,41 +6,20 @@ from binance.client import Client
 import yfinance as yf
 
 # ================= CONFIG =================
-TOKEN = os.getenv("TOKEN")             # Telegram Bot Token
-CHAT_ID = int(os.getenv("CHAT_ID"))    # Telegram Chat ID
-client = Client()                       # Binance client
+TOKEN = os.getenv("TOKEN")
+CHAT_ID = int(os.getenv("CHAT_ID"))
+client = Client()
 
 # ================= STOCK LIST =================
 stocks = [
-    # IDX Kompas100
-    "AADI.JK","ACES.JK","ADMR.JK","ADRO.JK","AKRA.JK",
-    "AMMN.JK","AMRT.JK","ANTM.JK","ARCI.JK","ARTO.JK",
-    "ASII.JK","BBCA.JK","BBNI.JK","BBRI.JK","BBTN.JK",
-    "BBYB.JK","BRIS.JK","BRMS.JK","BRPT.JK","BSDE.JK",
-    "BTPS.JK","BUKA.JK","BUMI.JK","BUVA.JK","CBDK.JK",
-    "CMRY.JK","CPIN.JK","CTRA.JK","CUAN.JK","DEWA.JK",
-    "DSNG.JK","DSSA.JK","ELSA.JK","EMTK.JK","ENRG.JK",
-    "ERAA.JK","ESSA.JK","EXCL.JK","FILM.JK","GOTO.JK",
-    "HEAL.JK","HRTA.JK","HRUM.JK","ICBP.JK","IMPC.JK",
-    "INET.JK","INCO.JK","INDF.JK","INDY.JK","INKP.JK",
-    "INTP.JK","ISAT.JK","ITMG.JK","JPFA.JK","JSMR.JK",
-    "KIJA.JK","KLBF.JK","KPIG.JK","MAPA.JK","MAPI.JK",
-    "MBMA.JK","MDKA.JK","MEDC.JK","MIKA.JK","MTEL.JK",
-    "MYOR.JK","NCKL.JK","PANI.JK","PGAS.JK","PNLF.JK",
-    "PSAB.JK","PTBA.JK","PTRO.JK","PWON.JK","RAJA.JK",
-    "RATU.JK","SCMA.JK","SGER.JK","SIDO.JK","SMGR.JK",
-    "SMIL.JK","SMRA.JK","SSIA.JK","TAPG.JK","TCPI.JK",
-    "TINS.JK","TLKM.JK","TOBA.JK","TOWR.JK","TPIA.JK",
-    "UNTR.JK","UNVR.JK","WIFI.JK","WIRG.JK",
-    
-    # MSCI IMI tambahan
-    "BREN.JK","DSSA.JK","CUAN.JK"
+    "BBCA.JK","BBRI.JK","BMRI.JK","TLKM.JK","ASII.JK",
+    "UNTR.JK","ANTM.JK","ADRO.JK","MDKA.JK","GOTO.JK",
+    "CPIN.JK","JPFA.JK","BRPT.JK","TPIA.JK","EXCL.JK",
+    "ISAT.JK","PTBA.JK","SMGR.JK","KLBF.JK","ICBP.JK"
 ]
+stocks = list(set(stocks))  # hapus duplikat
 
-# Hapus duplikat otomatis
-stocks = list(set(stocks))
-
-# ================= HELPER FUNCTIONS =================
+# ================= HELPER =================
 def send_telegram(msg):
     url = f"https://api.telegram.org/bot{TOKEN}/sendMessage"
     requests.post(url, data={"chat_id": CHAT_ID, "text": msg})
@@ -61,7 +39,7 @@ def compute_rsi(series, period=14):
     rs = gain / loss
     return 100 - (100 / (1 + rs))
 
-# ================= CRYPTO FUNCTIONS =================
+# ================= CRYPTO =================
 def get_crypto_symbols():
     info = client.futures_exchange_info()
     return [s['symbol'] for s in info['symbols']
@@ -71,8 +49,8 @@ def check_crypto_signal(symbol):
     try:
         klines = client.futures_klines(symbol=symbol, interval='4h', limit=100)
         df = pd.DataFrame(klines)
-        df[4] = df[4].astype(float)  # Close
-        df[5] = df[5].astype(float)  # Volume
+        df[4] = df[4].astype(float)
+        df[5] = df[5].astype(float)
 
         df['MA7'] = df[4].rolling(7).mean()
         df['MA25'] = df[4].rolling(25).mean()
@@ -81,47 +59,43 @@ def check_crypto_signal(symbol):
         last = df.iloc[-1]
         prev = df.iloc[-2]
 
-        # BULLISH
-        if prev['MA7'] < prev['MA25'] and last['MA7'] > last['MA25'] and last['RSI']>45 and last[5]>0:
+        if prev['MA7'] < prev['MA25'] and last['MA7'] > last['MA25'] and last['RSI']>45:
             return "BULLISH"
-        # BEARISH
-        if prev['MA7'] > prev['MA25'] and last['MA7'] < last['MA25'] and last['RSI']<55 and last[5]>0:
+        if prev['MA7'] > prev['MA25'] and last['MA7'] < last['MA25'] and last['RSI']<55:
             return "BEARISH"
         return None
     except:
         return None
 
-# ================= MAIN LOOP =================
+# ================= MAIN =================
 crypto_symbols = get_crypto_symbols()
-stored_stock_message = ""  # Simpan hasil scan saham
+stored_stock_message = ""
+last_crypto_hour = -1
+stock_report_sent = False
 
 while True:
     now = pd.Timestamp.now()
-    now_hour = now.hour
-    now_minute = now.minute
+    h, m = now.hour, now.minute
 
-    # ---------------- CRYPTO 4H ----------------
-    crypto_msg = "CRYPTO :\n\n🟢 BULLISH:\n"
-    bullish, bearish = [], []
-
-    if now_hour % 4 == 0 and 6 <= now_hour <= 20 and now_minute < 5:
+    # ---------------- CRYPTO ----------------
+    if 6 <= h <= 20 and h % 2 == 0 and last_crypto_hour != h:
+        last_crypto_hour = h
+        bullish, bearish = [], []
         for sym in crypto_symbols:
             signal = check_crypto_signal(sym)
             price = float(client.futures_symbol_ticker(symbol=sym)['price'])
-            coin_name = sym.replace("USDT","")  # Hapus USDT
-            if signal=="BULLISH":
+            coin_name = sym.replace("USDT","")
+            if signal == "BULLISH":
                 bullish.append(f"{coin_name}: Entry {format_price(price)}")
-            elif signal=="BEARISH":
+            elif signal == "BEARISH":
                 bearish.append(f"{coin_name}: Entry {format_price(price)}")
 
-        bullish = bullish[:10]
-        bearish = bearish[:10]
-        crypto_msg += "\n".join(bullish) + "\n\n🔴 BEARISH:\n" + "\n".join(bearish)
-        send_telegram(crypto_msg)
+        msg = "CRYPTO :\n\n🟢 BULLISH:\n" + "\n".join(bullish) + "\n\n🔴 BEARISH:\n" + "\n".join(bearish)
+        send_telegram(msg)
 
     # ---------------- STOCKS SCAN ----------------
-    if now_hour == 17 and now_minute < 5:  # Market close
-        stock_msg = "STOCKS :\n"
+    if h == 17 and m < 5:  # market close
+        stock_msg = ""
         for sym in stocks:
             try:
                 df = yf.download(sym, period="6mo", interval="1d", progress=False)
@@ -130,18 +104,19 @@ while True:
                 df['RSI'] = compute_rsi(df['Close'])
                 last = df.iloc[-1]
                 prev = df.iloc[-2]
-
                 if prev['MA20'] < prev['MA50'] and last['MA20'] > last['MA50'] and last['RSI']>50:
                     stock_msg += f"{sym}: Entry {format_price(last['Close'])}\n"
                 elif prev['MA20'] > prev['MA50'] and last['MA20'] < last['MA50'] and last['RSI']<50:
                     stock_msg += f"{sym}: Entry {format_price(last['Close'])}\n"
             except:
                 continue
-        stored_stock_message = stock_msg  # simpan hasil scan saham
+        stored_stock_message = stock_msg
+        stock_report_sent = False
 
-    # ---------------- SEND STOCKS JAM 08:00 ----------------
-    if now_hour == 8 and now_minute < 5 and stored_stock_message:
-        send_telegram("STOCKS :\n\n" + stored_stock_message)
-        stored_stock_message = ""  # reset setelah kirim
+    # ---------------- SEND STOCKS JAM 18:00 ----------------
+    if h == 18 and not stock_report_sent:
+        if stored_stock_message:
+            send_telegram("STOCKS :\n\n" + stored_stock_message)
+        stock_report_sent = True  # pastikan hanya sekali
 
-    time.sleep(60)  # cek setiap menit untuk crypto 4H dan stocks 08:00
+    time.sleep(60)
