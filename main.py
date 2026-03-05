@@ -1,179 +1,94 @@
 import yfinance as yf
 import pandas as pd
-import ta
 import requests
-from datetime import datetime
-import time
 
-TELEGRAM_TOKEN = "ISI_TOKEN_BOT"
+# ==============================
+# TELEGRAM CONFIG
+# ==============================
+TOKEN = "ISI_TOKEN_KAMU"
 CHAT_ID = "ISI_CHAT_ID"
 
-# ================================
-# TELEGRAM FUNCTION
-# ================================
-def send_telegram(message):
-    url = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendMessage"
-    payload = {
-        "chat_id": CHAT_ID,
-        "text": message
-    }
-    requests.post(url, data=payload)
+def send_telegram(msg):
+    url = f"https://api.telegram.org/bot{TOKEN}/sendMessage"
+    requests.post(url, data={"chat_id": CHAT_ID, "text": msg})
 
-# ================================
-# CRYPTO TOP 100
-# ================================
-crypto_list = [
-"BTCUSDT","ETHUSDT","BNBUSDT","SOLUSDT","XRPUSDT","ADAUSDT","DOGEUSDT","TRXUSDT",
-"TONUSDT","LINKUSDT","MATICUSDT","DOTUSDT","LTCUSDT","BCHUSDT","AVAXUSDT","SHIBUSDT",
-"APTUSDT","NEARUSDT","ATOMUSDT","FILUSDT","ARBUSDT","OPUSDT","INJUSDT","SUIUSDT",
-"PEPEUSDT","SEIUSDT","RUNEUSDT","AAVEUSDT","GRTUSDT","RNDRUSDT","STXUSDT","IMXUSDT",
-"FETUSDT","ALGOUSDT","VETUSDT","HBARUSDT","MKRUSDT","EGLDUSDT","XTZUSDT","THETAUSDT",
-"SANDUSDT","MANAUSDT","AXSUSDT","FLOWUSDT","KAVAUSDT","NEOUSDT","EOSUSDT","KLAYUSDT",
-"CHZUSDT","MINAUSDT","ROSEUSDT","DYDXUSDT","LDOUSDT","GMXUSDT","ZECUSDT","COMPUSDT",
-"SNXUSDT","1INCHUSDT","CRVUSDT","ENJUSDT","CAKEUSDT","BATUSDT","ZILUSDT","ONTUSDT",
-"ICXUSDT","KSMUSDT","QTUMUSDT","DASHUSDT","ANKRUSDT","CELRUSDT","SKLUSDT","HOTUSDT",
-"IOSTUSDT","SCUSDT","ZENUSDT","STORJUSDT","ARUSDT","CFXUSDT","WAVESUSDT","FLMUSDT",
-"BANDUSDT","OCEANUSDT","BALUSDT","UMAUSDT","YFIUSDT","SXPUSDT","RSRUSDT","REEFUSDT",
-"CTSIUSDT","API3USDT","LRCUSDT","MAGICUSDT","HOOKUSDT","TLMUSDT","ALPHAUSDT"
+# ==============================
+# LIST 100 SAHAM IDX
+# ==============================
+stocks = [
+"BBCA.JK","BBRI.JK","BMRI.JK","BBNI.JK","TLKM.JK",
+"ASII.JK","UNTR.JK","ANTM.JK","ADRO.JK","MDKA.JK",
+"GOTO.JK","CPIN.JK","JPFA.JK","BRPT.JK","TPIA.JK",
+"EXCL.JK","ISAT.JK","PTBA.JK","SMGR.JK","KLBF.JK",
+"ICBP.JK","INDF.JK","INCO.JK","AKRA.JK","TOWR.JK",
+"TBIG.JK","ITMG.JK","AMRT.JK","BRMS.JK","DSSA.JK",
+"BBTN.JK","BJBR.JK","BJTM.JK","BSDE.JK","PWON.JK",
+"CTRA.JK","SMRA.JK","ERAA.JK","MAPI.JK","ACES.JK",
+"SIDO.JK","HMSP.JK","GGRM.JK","MIKA.JK","SILO.JK",
+"HEAL.JK","MEDC.JK","PGAS.JK","HRUM.JK","INDY.JK",
+"DOID.JK","ADHI.JK","WIKA.JK","PTPP.JK","WSKT.JK",
+"JSMR.JK","RAJA.JK","ESSA.JK","ELSA.JK","SCMA.JK",
+"MNCN.JK","VIVA.JK","FILM.JK","LPPF.JK","RALS.JK",
+"MAPA.JK","MPPA.JK","SGER.JK","UNVR.JK","MYOR.JK",
+"ROTI.JK","GOOD.JK","AALI.JK","LSIP.JK","SIMP.JK",
+"TAPG.JK","DSNG.JK","BISI.JK","MAIN.JK","SRTG.JK",
+"IPCM.JK","WINS.JK","BULL.JK","NELY.JK","DEWA.JK",
+"BUMA.JK","TOBA.JK","SSMS.JK","GJTL.JK","AUTO.JK",
+"IMAS.JK","SMSM.JK","LPKR.JK","DILD.JK","KIJA.JK"
 ]
 
-# ================================
-# STOCK LIST (100 IDX)
-# ================================
-stock_list = [
-"BBCA.JK","BMRI.JK","BBRI.JK","TLKM.JK","ASII.JK","ICBP.JK","UNVR.JK","INDF.JK",
-"ADRO.JK","MDKA.JK","AMRT.JK","BRPT.JK","CPIN.JK","GOTO.JK","HRUM.JK","ITMG.JK",
-"PGAS.JK","PTBA.JK","SMGR.JK","ANTM.JK","KLBF.JK","ACES.JK","AKRA.JK","ARTO.JK",
-"BBNI.JK","BBTN.JK","BDMN.JK","BJBR.JK","BJTM.JK","BRIS.JK","BTPS.JK","CTRA.JK",
-"DMAS.JK","ERAA.JK","EXCL.JK","HMSP.JK","INCO.JK","INKP.JK","JPFA.JK","JSMR.JK",
-"LSIP.JK","MAIN.JK","MEDC.JK","MIKA.JK","MNCN.JK","PGEO.JK","PNLF.JK","PPRO.JK",
-"PWON.JK","SCMA.JK","SIDO.JK","SMRA.JK","TBIG.JK","TINS.JK","TKIM.JK","TOWR.JK",
-"UNTR.JK","WIKA.JK","WSKT.JK","ADHI.JK","DOID.JK","ELSA.JK","ESSA.JK","HEAL.JK",
-"INDY.JK","ISAT.JK","MAPA.JK","MAPB.JK","MLBI.JK","MTDL.JK","MYOR.JK","NISP.JK",
-"PNBN.JK","PTPP.JK","RAJA.JK","SAME.JK","SIMP.JK","SMSM.JK","SSMS.JK","TAPG.JK",
-"TARA.JK","TPIA.JK","TRAM.JK","WEGE.JK","WOOD.JK","WTON.JK","ZINC.JK"
-]
+# ==============================
+# RSI FUNCTION
+# ==============================
+def compute_rsi(series, period=14):
+    delta = series.diff()
+    gain = delta.where(delta > 0, 0).rolling(period).mean()
+    loss = -delta.where(delta < 0, 0).rolling(period).mean()
+    rs = gain / loss
+    return 100 - (100 / (1 + rs))
 
-# ================================
-# INDICATOR FUNCTION
-# ================================
-def analyze(df):
-    df["EMA20"] = ta.trend.ema_indicator(df["Close"], window=20)
-    df["EMA50"] = ta.trend.ema_indicator(df["Close"], window=50)
-    df["RSI"] = ta.momentum.rsi(df["Close"], window=14)
-    df["VOL_SMA10"] = df["Volume"].rolling(10).mean()
+# ==============================
+# SCAN
+# ==============================
+bullish = []
 
-    last = df.iloc[-1]
+for s in stocks:
+    try:
+        df = yf.download(s, period="6mo", interval="1d", progress=False)
 
-    bullish = (
-        last["Close"] > last["EMA20"] and
-        last["EMA20"] > last["EMA50"] and
-        last["RSI"] > 50 and
-        last["Volume"] > last["VOL_SMA10"]
-    )
+        if len(df) < 60:
+            continue
 
-    bearish = (
-        last["Close"] < last["EMA20"] and
-        last["EMA20"] < last["EMA50"] and
-        last["RSI"] < 50 and
-        last["Volume"] > last["VOL_SMA10"]
-    )
+        df["MA20"] = df["Close"].rolling(20).mean()
+        df["MA50"] = df["Close"].rolling(50).mean()
+        df["VOLAVG"] = df["Volume"].rolling(20).mean()
+        df["RSI"] = compute_rsi(df["Close"])
 
-    return bullish, bearish
+        last = df.iloc[-1]
+        prev = df.iloc[-2]
 
-# ================================
-# CRYPTO SCAN
-# ================================
-def scan_crypto():
-    bullish = []
-    bearish = []
+        volume_ok = last["Volume"] > last["VOLAVG"]
 
-    for coin in crypto_list:
-        try:
-            symbol = coin.replace("USDT","-USDT")
-            df = yf.download(symbol, interval="4h", period="10d")
+        trend = prev["MA20"] < prev["MA50"] and last["MA20"] > last["MA50"]
+        reversal = last["RSI"] < 35 and volume_ok
 
-            if len(df) < 50:
-                continue
+        if volume_ok and (trend or reversal):
+            bullish.append(s.replace(".JK",""))
 
-            bull, bear = analyze(df)
+    except:
+        continue
 
-            name = coin.replace("USDT","")
+# ==============================
+# FORMAT TELEGRAM
+# ==============================
+msg = "STOCKS :\n\n"
 
-            if bull:
-                bullish.append(name)
+if bullish:
+    msg += "🟢 BULLISH:\n"
+    msg += ", ".join(bullish)
+else:
+    msg += "🟢 BULLISH:\n\n"
 
-            if bear:
-                bearish.append(name)
+send_telegram(msg)
 
-        except:
-            pass
-
-    message = "CRYPTO\n\n"
-
-    if bullish:
-        message += "🟢 BULLISH:\n" + "\n".join(bullish) + "\n\n"
-
-    if bearish:
-        message += "🔴 BEARISH:\n" + "\n".join(bearish)
-
-    send_telegram(message)
-
-# ================================
-# STOCK SCAN
-# ================================
-def scan_stocks():
-    bullish = []
-    bearish = []
-
-    for stock in stock_list:
-        try:
-            df = yf.download(stock, period="6mo", interval="1d")
-
-            if len(df) < 50:
-                continue
-
-            bull, bear = analyze(df)
-
-            name = stock.replace(".JK","")
-
-            if bull:
-                bullish.append(name)
-
-            if bear:
-                bearish.append(name)
-
-        except:
-            pass
-
-    message = "STOCKS\n\n"
-
-    if bullish:
-        message += "🟢 BULLISH:\n" + "\n".join(bullish) + "\n\n"
-
-    if bearish:
-        message += "🔴 BEARISH:\n" + "\n".join(bearish)
-
-    send_telegram(message)
-
-# ================================
-# LOOP
-# ================================
-while True:
-
-    now = datetime.now()
-
-    hour = now.hour
-    minute = now.minute
-
-    # CRYPTO setiap 2 jam 06-20
-    if hour in [6,8,10,12,14,16,18,20] and minute == 0:
-        scan_crypto()
-        time.sleep(60)
-
-    # STOCKS jam 18:00
-    if hour == 18 and minute == 0:
-        scan_stocks()
-        time.sleep(60)
-
-    time.sleep(30)
+print("Scan selesai")
