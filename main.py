@@ -1,139 +1,179 @@
-import os
-import time
-import requests
-import pandas as pd
-from binance.client import Client
 import yfinance as yf
+import pandas as pd
+import ta
+import requests
+from datetime import datetime
+import time
 
-# ================= CONFIG =================
-TOKEN = os.getenv("TOKEN")
-CHAT_ID = int(os.getenv("CHAT_ID"))
-client = Client()
+TELEGRAM_TOKEN = "ISI_TOKEN_BOT"
+CHAT_ID = "ISI_CHAT_ID"
 
-# ================= TELEGRAM =================
-def send_telegram(msg):
-    try:
-        url = f"https://api.telegram.org/bot{TOKEN}/sendMessage"
-        requests.post(url, data={"chat_id": CHAT_ID, "text": msg})
-    except:
-        pass
+# ================================
+# TELEGRAM FUNCTION
+# ================================
+def send_telegram(message):
+    url = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendMessage"
+    payload = {
+        "chat_id": CHAT_ID,
+        "text": message
+    }
+    requests.post(url, data=payload)
 
-# ================= RSI =================
-def compute_rsi(series, period=14):
-    delta = series.diff()
-    gain = delta.where(delta > 0, 0).rolling(period).mean()
-    loss = -delta.where(delta < 0, 0).rolling(period).mean()
-    rs = gain / loss
-    return 100 - (100 / (1 + rs))
+# ================================
+# CRYPTO TOP 100
+# ================================
+crypto_list = [
+"BTCUSDT","ETHUSDT","BNBUSDT","SOLUSDT","XRPUSDT","ADAUSDT","DOGEUSDT","TRXUSDT",
+"TONUSDT","LINKUSDT","MATICUSDT","DOTUSDT","LTCUSDT","BCHUSDT","AVAXUSDT","SHIBUSDT",
+"APTUSDT","NEARUSDT","ATOMUSDT","FILUSDT","ARBUSDT","OPUSDT","INJUSDT","SUIUSDT",
+"PEPEUSDT","SEIUSDT","RUNEUSDT","AAVEUSDT","GRTUSDT","RNDRUSDT","STXUSDT","IMXUSDT",
+"FETUSDT","ALGOUSDT","VETUSDT","HBARUSDT","MKRUSDT","EGLDUSDT","XTZUSDT","THETAUSDT",
+"SANDUSDT","MANAUSDT","AXSUSDT","FLOWUSDT","KAVAUSDT","NEOUSDT","EOSUSDT","KLAYUSDT",
+"CHZUSDT","MINAUSDT","ROSEUSDT","DYDXUSDT","LDOUSDT","GMXUSDT","ZECUSDT","COMPUSDT",
+"SNXUSDT","1INCHUSDT","CRVUSDT","ENJUSDT","CAKEUSDT","BATUSDT","ZILUSDT","ONTUSDT",
+"ICXUSDT","KSMUSDT","QTUMUSDT","DASHUSDT","ANKRUSDT","CELRUSDT","SKLUSDT","HOTUSDT",
+"IOSTUSDT","SCUSDT","ZENUSDT","STORJUSDT","ARUSDT","CFXUSDT","WAVESUSDT","FLMUSDT",
+"BANDUSDT","OCEANUSDT","BALUSDT","UMAUSDT","YFIUSDT","SXPUSDT","RSRUSDT","REEFUSDT",
+"CTSIUSDT","API3USDT","LRCUSDT","MAGICUSDT","HOOKUSDT","TLMUSDT","ALPHAUSDT"
+]
 
-# ================= GET TOP 100 CRYPTO =================
-def get_top100_symbols():
-    try:
-        tickers = client.futures_ticker()
-        df = pd.DataFrame(tickers)
+# ================================
+# STOCK LIST (100 IDX)
+# ================================
+stock_list = [
+"BBCA.JK","BMRI.JK","BBRI.JK","TLKM.JK","ASII.JK","ICBP.JK","UNVR.JK","INDF.JK",
+"ADRO.JK","MDKA.JK","AMRT.JK","BRPT.JK","CPIN.JK","GOTO.JK","HRUM.JK","ITMG.JK",
+"PGAS.JK","PTBA.JK","SMGR.JK","ANTM.JK","KLBF.JK","ACES.JK","AKRA.JK","ARTO.JK",
+"BBNI.JK","BBTN.JK","BDMN.JK","BJBR.JK","BJTM.JK","BRIS.JK","BTPS.JK","CTRA.JK",
+"DMAS.JK","ERAA.JK","EXCL.JK","HMSP.JK","INCO.JK","INKP.JK","JPFA.JK","JSMR.JK",
+"LSIP.JK","MAIN.JK","MEDC.JK","MIKA.JK","MNCN.JK","PGEO.JK","PNLF.JK","PPRO.JK",
+"PWON.JK","SCMA.JK","SIDO.JK","SMRA.JK","TBIG.JK","TINS.JK","TKIM.JK","TOWR.JK",
+"UNTR.JK","WIKA.JK","WSKT.JK","ADHI.JK","DOID.JK","ELSA.JK","ESSA.JK","HEAL.JK",
+"INDY.JK","ISAT.JK","MAPA.JK","MAPB.JK","MLBI.JK","MTDL.JK","MYOR.JK","NISP.JK",
+"PNBN.JK","PTPP.JK","RAJA.JK","SAME.JK","SIMP.JK","SMSM.JK","SSMS.JK","TAPG.JK",
+"TARA.JK","TPIA.JK","TRAM.JK","WEGE.JK","WOOD.JK","WTON.JK","ZINC.JK"
+]
 
-        df = df[df['symbol'].str.endswith("USDT")]
-        df['quoteVolume'] = pd.to_numeric(df['quoteVolume'], errors='coerce')
-        df = df.dropna()
-        df = df.sort_values("quoteVolume", ascending=False)
+# ================================
+# INDICATOR FUNCTION
+# ================================
+def analyze(df):
+    df["EMA20"] = ta.trend.ema_indicator(df["Close"], window=20)
+    df["EMA50"] = ta.trend.ema_indicator(df["Close"], window=50)
+    df["RSI"] = ta.momentum.rsi(df["Close"], window=14)
+    df["VOL_SMA10"] = df["Volume"].rolling(10).mean()
 
-        return df['symbol'].head(100).tolist()
-    except:
-        return []
+    last = df.iloc[-1]
 
-# ================= CRYPTO SIGNAL =================
-def check_crypto_signal(symbol):
-    try:
-        klines = client.futures_klines(symbol=symbol, interval='4h', limit=100)
-        df = pd.DataFrame(klines)
-        df[4] = df[4].astype(float)
+    bullish = (
+        last["Close"] > last["EMA20"] and
+        last["EMA20"] > last["EMA50"] and
+        last["RSI"] > 50 and
+        last["Volume"] > last["VOL_SMA10"]
+    )
 
-        df['MA7'] = df[4].rolling(7).mean()
-        df['MA25'] = df[4].rolling(25).mean()
-        df['RSI'] = compute_rsi(df[4])
+    bearish = (
+        last["Close"] < last["EMA20"] and
+        last["EMA20"] < last["EMA50"] and
+        last["RSI"] < 50 and
+        last["Volume"] > last["VOL_SMA10"]
+    )
 
-        last = df.iloc[-1]
-        prev = df.iloc[-2]
+    return bullish, bearish
 
-        if prev['MA7'] < prev['MA25'] and last['MA7'] > last['MA25'] and last['RSI'] > 45:
-            return "BULLISH"
-        if prev['MA7'] > prev['MA25'] and last['MA7'] < last['MA25'] and last['RSI'] < 55:
-            return "BEARISH"
-        return None
-    except:
-        return None
+# ================================
+# CRYPTO SCAN
+# ================================
+def scan_crypto():
+    bullish = []
+    bearish = []
 
-# ================= STOCK LIST =================
-stocks = list(set([
-    "BBCA.JK","BBRI.JK","BMRI.JK","TLKM.JK","ASII.JK",
-    "UNTR.JK","ANTM.JK","ADRO.JK","MDKA.JK","GOTO.JK",
-    "CPIN.JK","JPFA.JK","BRPT.JK","TPIA.JK","EXCL.JK",
-    "ISAT.JK","PTBA.JK","SMGR.JK","KLBF.JK","ICBP.JK",
-    "AMMN.JK","BREN.JK","DSNG.JK","ENRG.JK","AADI.JK"
-]))
+    for coin in crypto_list:
+        try:
+            symbol = coin.replace("USDT","-USDT")
+            df = yf.download(symbol, interval="4h", period="10d")
 
-# ================= MAIN LOOP =================
-last_crypto_sent = None
-last_stock_sent = None
+            if len(df) < 50:
+                continue
 
+            bull, bear = analyze(df)
+
+            name = coin.replace("USDT","")
+
+            if bull:
+                bullish.append(name)
+
+            if bear:
+                bearish.append(name)
+
+        except:
+            pass
+
+    message = "CRYPTO\n\n"
+
+    if bullish:
+        message += "🟢 BULLISH:\n" + "\n".join(bullish) + "\n\n"
+
+    if bearish:
+        message += "🔴 BEARISH:\n" + "\n".join(bearish)
+
+    send_telegram(message)
+
+# ================================
+# STOCK SCAN
+# ================================
+def scan_stocks():
+    bullish = []
+    bearish = []
+
+    for stock in stock_list:
+        try:
+            df = yf.download(stock, period="6mo", interval="1d")
+
+            if len(df) < 50:
+                continue
+
+            bull, bear = analyze(df)
+
+            name = stock.replace(".JK","")
+
+            if bull:
+                bullish.append(name)
+
+            if bear:
+                bearish.append(name)
+
+        except:
+            pass
+
+    message = "STOCKS\n\n"
+
+    if bullish:
+        message += "🟢 BULLISH:\n" + "\n".join(bullish) + "\n\n"
+
+    if bearish:
+        message += "🔴 BEARISH:\n" + "\n".join(bearish)
+
+    send_telegram(message)
+
+# ================================
+# LOOP
+# ================================
 while True:
-    now = pd.Timestamp.now()
+
+    now = datetime.now()
+
     hour = now.hour
     minute = now.minute
-    today = now.date()
 
-    # ================= CRYPTO =================
-    if 6 <= hour <= 20 and hour % 2 == 0 and minute == 0:
-        if last_crypto_sent != hour:
-            last_crypto_sent = hour
+    # CRYPTO setiap 2 jam 06-20
+    if hour in [6,8,10,12,14,16,18,20] and minute == 0:
+        scan_crypto()
+        time.sleep(60)
 
-            symbols = get_top100_symbols()
-            bullish, bearish = [], []
-
-            for sym in symbols:
-                signal = check_crypto_signal(sym)
-                coin = sym.replace("USDT", "")
-                if signal == "BULLISH":
-                    bullish.append(coin)
-                elif signal == "BEARISH":
-                    bearish.append(coin)
-
-            msg = "CRYPTO :\n\n🟢 BULLISH:\n"
-            msg += "\n".join(bullish) if bullish else "-"
-            msg += "\n\n🔴 BEARISH:\n"
-            msg += "\n".join(bearish) if bearish else "-"
-
-            send_telegram(msg)
-
-    # ================= STOCKS =================
+    # STOCKS jam 18:00
     if hour == 18 and minute == 0:
-        if last_stock_sent != today:
-            last_stock_sent = today
-
-            bullish_stock, bearish_stock = [], []
-
-            for sym in stocks:
-                try:
-                    df = yf.download(sym, period="6mo", interval="1d", progress=False)
-                    df['MA20'] = df['Close'].rolling(20).mean()
-                    df['MA50'] = df['Close'].rolling(50).mean()
-                    df['RSI'] = compute_rsi(df['Close'])
-
-                    last = df.iloc[-1]
-                    prev = df.iloc[-2]
-
-                    if prev['MA20'] < prev['MA50'] and last['MA20'] > last['MA50'] and last['RSI'] > 50:
-                        bullish_stock.append(sym.replace(".JK",""))
-                    elif prev['MA20'] > prev['MA50'] and last['MA20'] < last['MA50'] and last['RSI'] < 50:
-                        bearish_stock.append(sym.replace(".JK",""))
-                except:
-                    continue
-
-            msg = "STOCKS :\n\n🟢 BULLISH:\n"
-            msg += "\n".join(bullish_stock) if bullish_stock else "-"
-            msg += "\n\n🔴 BEARISH:\n"
-            msg += "\n".join(bearish_stock) if bearish_stock else "-"
-
-            send_telegram(msg)
+        scan_stocks()
+        time.sleep(60)
 
     time.sleep(30)
