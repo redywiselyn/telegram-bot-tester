@@ -8,86 +8,91 @@ import requests
 TOKEN = "ISI_TOKEN_KAMU"
 CHAT_ID = "ISI_CHAT_ID"
 
-def send_telegram(msg):
+def send_telegram(message):
     url = f"https://api.telegram.org/bot{TOKEN}/sendMessage"
-    requests.post(url, data={"chat_id": CHAT_ID, "text": msg})
+    requests.post(url, data={"chat_id": CHAT_ID, "text": message})
 
 # ==============================
-# LIST 100 SAHAM IDX
+# LIST 100 SAHAM INDONESIA
 # ==============================
-stocks = [
+
+stocks = list(set([
 "BBCA.JK","BBRI.JK","BMRI.JK","BBNI.JK","TLKM.JK",
 "ASII.JK","UNTR.JK","ANTM.JK","ADRO.JK","MDKA.JK",
 "GOTO.JK","CPIN.JK","JPFA.JK","BRPT.JK","TPIA.JK",
 "EXCL.JK","ISAT.JK","PTBA.JK","SMGR.JK","KLBF.JK",
-"ICBP.JK","INDF.JK","INCO.JK","AKRA.JK","TOWR.JK",
-"TBIG.JK","ITMG.JK","AMRT.JK","BRMS.JK","DSSA.JK",
-"BBTN.JK","BJBR.JK","BJTM.JK","BSDE.JK","PWON.JK",
-"CTRA.JK","SMRA.JK","ERAA.JK","MAPI.JK","ACES.JK",
-"SIDO.JK","HMSP.JK","GGRM.JK","MIKA.JK","SILO.JK",
-"HEAL.JK","MEDC.JK","PGAS.JK","HRUM.JK","INDY.JK",
-"DOID.JK","ADHI.JK","WIKA.JK","PTPP.JK","WSKT.JK",
-"JSMR.JK","RAJA.JK","ESSA.JK","ELSA.JK","SCMA.JK",
-"MNCN.JK","VIVA.JK","FILM.JK","LPPF.JK","RALS.JK",
-"MAPA.JK","MPPA.JK","SGER.JK","UNVR.JK","MYOR.JK",
-"ROTI.JK","GOOD.JK","AALI.JK","LSIP.JK","SIMP.JK",
-"TAPG.JK","DSNG.JK","BISI.JK","MAIN.JK","SRTG.JK",
-"IPCM.JK","WINS.JK","BULL.JK","NELY.JK","DEWA.JK",
-"BUMA.JK","TOBA.JK","SSMS.JK","GJTL.JK","AUTO.JK",
-"IMAS.JK","SMSM.JK","LPKR.JK","DILD.JK","KIJA.JK"
-]
+"ICBP.JK","INDF.JK","INCO.JK","ITMG.JK","TBIG.JK",
+"TOWR.JK","AKRA.JK","AMRT.JK","MNCN.JK","RAJA.JK",
+"WIFI.JK","INKP.JK","AUTO.JK","BJBR.JK","BBTN.JK",
+"BRMS.JK","DSSA.JK","ADHI.JK","PTRO.JK","MSIN.JK",
+"ENRG.JK","DSNG.JK","AADI.JK","KPIG.JK","RATU.JK",
+"TAPG.JK","BREN.JK","AMMN.JK","PGAS.JK","MEDC.JK",
+"ACES.JK","ERAA.JK","SIDO.JK","HMSP.JK","MYOR.JK",
+"SCMA.JK","PWON.JK","CTRA.JK","BSDE.JK","SMRA.JK",
+"DMAS.JK","KIJA.JK","WIKA.JK","PTPP.JK","JSMR.JK",
+"BUKA.JK","DOID.JK","HRUM.JK","INDY.JK","ADMR.JK",
+"DEWA.JK","ELSA.JK","HEAL.JK","MIKA.JK","SILO.JK",
+"RALS.JK","LPPF.JK","MAPA.JK","MAPB.JK","UNVR.JK",
+"STTP.JK","ULTJ.JK","WOOD.JK","FREN.JK","MTEL.JK",
+"BDMN.JK","BNGA.JK","BNLI.JK","PNBN.JK","ARTO.JK",
+"BBYB.JK","MEGA.JK","NISP.JK","BTPS.JK","BFIN.JK"
+]))
 
 # ==============================
-# RSI FUNCTION
+# SCAN STOCKS
 # ==============================
-def compute_rsi(series, period=14):
-    delta = series.diff()
-    gain = delta.where(delta > 0, 0).rolling(period).mean()
-    loss = -delta.where(delta < 0, 0).rolling(period).mean()
-    rs = gain / loss
-    return 100 - (100 / (1 + rs))
 
-# ==============================
-# SCAN
-# ==============================
 bullish = []
+bearish = []
 
-for s in stocks:
+print("Scanning Stocks...")
+
+for stock in stocks:
+
     try:
-        df = yf.download(s, period="6mo", interval="1d", progress=False)
+        df = yf.download(stock, period="6mo", interval="1d", progress=False)
 
         if len(df) < 60:
             continue
 
-        df["MA20"] = df["Close"].rolling(20).mean()
-        df["MA50"] = df["Close"].rolling(50).mean()
-        df["VOLAVG"] = df["Volume"].rolling(20).mean()
-        df["RSI"] = compute_rsi(df["Close"])
+        df['MA20'] = df['Close'].rolling(20).mean()
+        df['MA50'] = df['Close'].rolling(50).mean()
 
         last = df.iloc[-1]
         prev = df.iloc[-2]
 
-        volume_ok = last["Volume"] > last["VOLAVG"]
+        # Bullish cross
+        if prev['MA20'] < prev['MA50'] and last['MA20'] > last['MA50']:
+            bullish.append(stock.replace(".JK",""))
 
-        trend = prev["MA20"] < prev["MA50"] and last["MA20"] > last["MA50"]
-        reversal = last["RSI"] < 35 and volume_ok
-
-        if volume_ok and (trend or reversal):
-            bullish.append(s.replace(".JK",""))
+        # Bearish cross
+        elif prev['MA20'] > prev['MA50'] and last['MA20'] < last['MA50']:
+            bearish.append(stock.replace(".JK",""))
 
     except:
         continue
 
 # ==============================
-# FORMAT TELEGRAM
+# FORMAT MESSAGE
 # ==============================
+
 msg = "STOCKS :\n\n"
 
+msg += "🟢 BULLISH:\n"
 if bullish:
-    msg += "🟢 BULLISH:\n"
     msg += ", ".join(bullish)
 else:
-    msg += "🟢 BULLISH:\n\n"
+    msg += "-"
+
+msg += "\n\n🔴 BEARISH:\n"
+if bearish:
+    msg += ", ".join(bearish)
+else:
+    msg += "-"
+
+# ==============================
+# SEND TELEGRAM
+# ==============================
 
 send_telegram(msg)
 
