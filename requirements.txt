@@ -1,4 +1,7 @@
-pandas
-requests
-python-binance
 yfinance
+pandas
+numpy
+requests
+ta
+lxml
+html5lib
