@@ -1,99 +1,122 @@
 import yfinance as yf
 import pandas as pd
+import numpy as np
 import requests
+import os
+from ta.momentum import RSIIndicator
 
-# ==============================
-# TELEGRAM CONFIG
-# ==============================
-TOKEN = "ISI_TOKEN_KAMU"
-CHAT_ID = "ISI_CHAT_ID"
+TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN")
+TELEGRAM_CHAT_ID = os.getenv("TELEGRAM_CHAT_ID")
 
-def send_telegram(message):
-    url = f"https://api.telegram.org/bot{TOKEN}/sendMessage"
-    requests.post(url, data={"chat_id": CHAT_ID, "text": message})
 
-# ==============================
-# LIST 100 SAHAM INDONESIA
-# ==============================
+def send_telegram(msg):
+    if TELEGRAM_TOKEN and TELEGRAM_CHAT_ID:
+        url = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendMessage"
+        requests.post(url,data={"chat_id": TELEGRAM_CHAT_ID,"text": msg})
 
-stocks = list(set([
-"BBCA.JK","BBRI.JK","BMRI.JK","BBNI.JK","TLKM.JK",
-"ASII.JK","UNTR.JK","ANTM.JK","ADRO.JK","MDKA.JK",
-"GOTO.JK","CPIN.JK","JPFA.JK","BRPT.JK","TPIA.JK",
-"EXCL.JK","ISAT.JK","PTBA.JK","SMGR.JK","KLBF.JK",
-"ICBP.JK","INDF.JK","INCO.JK","ITMG.JK","TBIG.JK",
-"TOWR.JK","AKRA.JK","AMRT.JK","MNCN.JK","RAJA.JK",
-"WIFI.JK","INKP.JK","AUTO.JK","BJBR.JK","BBTN.JK",
-"BRMS.JK","DSSA.JK","ADHI.JK","PTRO.JK","MSIN.JK",
-"ENRG.JK","DSNG.JK","AADI.JK","KPIG.JK","RATU.JK",
-"TAPG.JK","BREN.JK","AMMN.JK","PGAS.JK","MEDC.JK",
-"ACES.JK","ERAA.JK","SIDO.JK","HMSP.JK","MYOR.JK",
-"SCMA.JK","PWON.JK","CTRA.JK","BSDE.JK","SMRA.JK",
-"DMAS.JK","KIJA.JK","WIKA.JK","PTPP.JK","JSMR.JK",
-"BUKA.JK","DOID.JK","HRUM.JK","INDY.JK","ADMR.JK",
-"DEWA.JK","ELSA.JK","HEAL.JK","MIKA.JK","SILO.JK",
-"RALS.JK","LPPF.JK","MAPA.JK","MAPB.JK","UNVR.JK",
-"STTP.JK","ULTJ.JK","WOOD.JK","FREN.JK","MTEL.JK",
-"BDMN.JK","BNGA.JK","BNLI.JK","PNBN.JK","ARTO.JK",
-"BBYB.JK","MEGA.JK","NISP.JK","BTPS.JK","BFIN.JK"
-]))
 
-# ==============================
-# SCAN STOCKS
-# ==============================
+# =========================
+# GET ALL IDX TICKERS
+# =========================
+def get_idx_tickers():
 
-bullish = []
-bearish = []
+    url = "https://raw.githubusercontent.com/datasets/s-and-p-500-companies/master/data/constituents.csv"
 
-print("Scanning Stocks...")
+    # fallback manual IDX list (lebih stabil)
+    tickers = pd.read_html("https://id.wikipedia.org/wiki/Daftar_perusahaan_yang_tercatat_di_Bursa_Efek_Indonesia")[0]
 
-for stock in stocks:
+    symbols = tickers.iloc[:,0].tolist()
+
+    symbols = [s+".JK" for s in symbols]
+
+    return symbols
+
+
+tickers = get_idx_tickers()
+
+print("Total saham:",len(tickers))
+
+results = []
+
+
+# =========================
+# SCANNER
+# =========================
+for ticker in tickers:
 
     try:
-        df = yf.download(stock, period="6mo", interval="1d", progress=False)
 
-        if len(df) < 60:
+        data = yf.download(ticker, period="6mo", progress=False)
+
+        if len(data) < 60:
             continue
 
-        df['MA20'] = df['Close'].rolling(20).mean()
-        df['MA50'] = df['Close'].rolling(50).mean()
+        data["MA50"] = data["Close"].rolling(50).mean()
+        data["VolAvg"] = data["Volume"].rolling(20).mean()
 
-        last = df.iloc[-1]
-        prev = df.iloc[-2]
+        rsi = RSIIndicator(data["Close"], window=14)
+        data["RSI"] = rsi.rsi()
 
-        # Bullish cross
-        if prev['MA20'] < prev['MA50'] and last['MA20'] > last['MA50']:
-            bullish.append(stock.replace(".JK",""))
+        last = data.iloc[-1]
 
-        # Bearish cross
-        elif prev['MA20'] > prev['MA50'] and last['MA20'] < last['MA50']:
-            bearish.append(stock.replace(".JK",""))
+        price = last["Close"]
+        ma50 = last["MA50"]
+        volume = last["Volume"]
+        volavg = last["VolAvg"]
+        rsi_val = last["RSI"]
+
+        breakout = price >= data["Close"].rolling(20).max().iloc[-1]
+        trend = price > ma50
+        vol_spike = volume > 2 * volavg
+        early = rsi_val < 65
+
+        score = 0
+
+        if breakout:
+            score += 30
+
+        if trend:
+            score += 25
+
+        if vol_spike:
+            score += 30
+
+        if early:
+            score += 15
+
+        if score >= 60:
+
+            results.append({
+                "ticker": ticker,
+                "score": score,
+                "price": round(price,2),
+                "vol_ratio": round(volume/volavg,2)
+            })
 
     except:
-        continue
+        pass
 
-# ==============================
-# FORMAT MESSAGE
-# ==============================
 
-msg = "STOCKS :\n\n"
+# =========================
+# RANKING
+# =========================
+df = pd.DataFrame(results)
 
-msg += "🟢 BULLISH:\n"
-if bullish:
-    msg += ", ".join(bullish)
+if len(df) > 0:
+
+    df = df.sort_values("score",ascending=False).head(10)
+
+    message = "🚀 IDX BANDAR BAGGER SCANNER\n\nTOP SETUP:\n\n"
+
+    for i,row in df.iterrows():
+
+        message += f"{row['ticker']} | Score:{row['score']} | Vol:{row['vol_ratio']}x\n"
+
 else:
-    msg += "-"
 
-msg += "\n\n🔴 BEARISH:\n"
-if bearish:
-    msg += ", ".join(bearish)
-else:
-    msg += "-"
+    message = "⚠️ Scanner selesai.\n\nTidak ada setup kuat hari ini."
 
-# ==============================
-# SEND TELEGRAM
-# ==============================
 
-send_telegram(msg)
+print(message)
 
-print("Scan selesai")
+send_telegram(message)
